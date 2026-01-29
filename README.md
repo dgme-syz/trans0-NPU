@@ -10,7 +10,7 @@
 | Ascend CANN Toolkit Version | 8.3.RC2             |
 
 ### Environment Preparation
-
+see [https://ascend.github.io/docs/sources/ascend/quick_install.html](https://ascend.github.io/docs/sources/ascend/quick_install.html) and [https://docs.vllm.ai/projects/ascend/zh-cn/v0.13.0/installation.html](https://docs.vllm.ai/projects/ascend/zh-cn/v0.13.0/installation.html)
 ```bash
 # Set versions
 npu="910b"
