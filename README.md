@@ -140,6 +140,7 @@ models/
 ## Quick Run Examples (Single-Card)
 
 ```bash
+mkdir -p cache/qwen_debug/ ckpts/qwen_debug/
 # SFT Training
 torchrun \
   --nproc_per_node=1 \
