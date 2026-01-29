@@ -20,11 +20,32 @@ def print_once(message):
         
 def free_gpu():
     gc.collect()
-    torch.cuda.empty_cache() # release torch objects
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache() # release torch objects
+    elif torch.npu.is_available():
+        torch.npu.empty_cache()
 
-def check_available_memory(device_index:int):
-    device = torch.device(f"cuda:{device_index}")
-    return (torch.cuda.get_device_properties(device).total_memory -torch.cuda.memory_allocated(device))/1024./1024./1024.
+def check_available_memory(device_index: int):
+    """
+    Returns available memory in GB for the given device index.
+    Supports CUDA and NPU.
+    """
+    if torch.cuda.is_available():
+        device = torch.device(f"cuda:{device_index}")
+        props = torch.cuda.get_device_properties(device)
+        used = torch.cuda.memory_allocated(device)
+        free_gb = (props.total_memory - used) / 1024.0 / 1024.0 / 1024.0
+        return free_gb
+    elif torch.npu.is_available():
+        import torch_npu
+        device = f"npu:{device_index}"
+        total_mem = torch_npu.npu.get_device_properties(device).total_memory
+        used_mem = torch_npu.npu.memory_allocated(device)
+        free_gb = (total_mem - used_mem) / 1024.0 / 1024.0 / 1024.0
+        return free_gb
+    else:
+        # fallback to CPU (return some small default)
+        return 0.0
 
 def set_special_tokens(model, tokenizer, show_info=False):
     if tokenizer.pad_token is None and tokenizer.pad_token_id is None:

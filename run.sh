@@ -1,3 +1,43 @@
+torchrun \
+  --nproc_per_node=1 \
+  main.py \
+  --mode SFT \
+  --llm_path /mnt/huangsj/models/Qwen3-0.6B \
+  --train_data_path /mnt/huangsj/trans0-npu/data/sft \
+  --cache_dir cache/qwen_debug/ \
+  --output_dir ckpts/qwen_debug/ \
+  --deepspeed configs/ds_z2_config.json \
+  --learning_rate 3e-6 \
+  --run_name qwen_baseline \
+  --report_to none \
+  --bf16 \
+  2>&1 | tee continue.log
+
+ARNOLD_WORKER_NUM=1 torchrun \
+  --nproc_per_node=1 \
+  main.py \
+  --mode RL \
+  --mcts_sample_size 1 \
+  --mc_count 2 \
+  --train_rounds 2 \
+  --llm_path /mnt/huangsj/models/Qwen3-0.6B \
+  --train_data_path ./dataset/sft \
+  --src_code eng_Latn \
+  --trg_code zho_Hans \
+  --self_play_languages "eng_Latn" "zho_Hans" "deu_Latn" \
+  --cache_dir cache/qwen_debug/ \
+  --flores_script flores200.py \
+  --output_dir ckpts/qwen_debug/ \
+  --nas_base_path . \
+  --deepspeed configs/ds_z2_config.json \
+  --rl_loss_type sppo_hard \
+  --learning_rate 1e-4 \
+  --rl_learning_rate 1e-6 \
+  --run_name qwen_rl_debug \
+  --report_to none \
+  2>&1 | tee continue.log
+
+
 WANDB_PROJECT="trans0" WANDB_NAME="llama3.1_deu2zho" torchrun --master_addr $METIS_WORKER_0_HOST --nproc_per_node $ARNOLD_WORKER_GPU --master_port $METIS_WORKER_0_PORT --node_rank $ARNOLD_ID --nnodes $ARNOLD_WORKER_NUM main.py \
     --mode RL  --mcts_sample_size 5 \
     --llm_path models/huggingface/Llama-3.1-8b/  \

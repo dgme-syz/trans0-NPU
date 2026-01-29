@@ -193,9 +193,10 @@ def validate_pair(args,  flores_script, src_lang_code, trg_lang_code, model_dir=
             print("comet=%.4f"%comet_score)
             if global_step is not None:
                 print(f"bleurt= {format(bleurt_score, '.4f')}, comet= {format(comet_score, '.4f')}")
-                wandb.log({
-                    "bleurt": bleurt_score, "comet": comet_score,
-                    "step": global_step})
+                if "wandb" in args.report_to:
+                    wandb.log({
+                        "bleurt": bleurt_score, "comet": comet_score,
+                        "step": global_step})
 
     free_gpu()
     return
@@ -359,6 +360,7 @@ def validate_by_mcts(args, valid_type:str="en2x",dev_data_path=None,model_dir=No
 
 def self_play(
         args, train_round: int,
+        mc_count,
         trg_lang_codes=[
             "deu_Latn","por_Latn","fra_Latn","ita_Latn",
             "eng_Latn","hin_Deva","spa_Latn","vie_Latn",
@@ -392,7 +394,7 @@ def self_play(
     # agent.distributed_valued_by_mcts(src_list, src_lang_code=src_lang_code, trg_lang_code="en")
     agent_mct_df = []
     for line in src_list:
-        mc_tree = agent.MCTS(src_sent=line.strip(), src_lang_code=src_lang_code, trg_lang_code=lang_code)
+        mc_tree = agent.MCTS(src_sent=line.strip(), src_lang_code=src_lang_code, trg_lang_code=lang_code, MC_count=mc_count)
         agent_mct_df.append(agent.yield_tree2rank(mc_tree))
         # agent.valued_by_BLEUrt(src_list, trg_list, src_lang_code=src_lang_code, trg_lang_code=trg_lang_code)  # for tuning
     local_df = pd.concat(agent_mct_df, ignore_index=True)
@@ -446,7 +448,7 @@ def RL_update(args, train_round:int):
     start=time.time()
     rl_loss = agent.update_policy(tuning_dataset)
     end = time.time()
-    if dist.get_rank()==0:
+    if dist.get_rank()==0 and "wandb" in args.report_to:
         wandb.log({"loss":rl_loss,"step": train_round+1})
 
     del agent, tuning_dataset, merged_df
@@ -466,7 +468,11 @@ if __name__=="__main__":
     parser.add_argument("--valid_type", type=str, default="x2en", help="valid type for valid and valid++ mode")
     parser.add_argument("--src_code", type=str, default="all", help="indicate src language type for validation")
     parser.add_argument("--trg_code", type=str, default="all", help="indicate trg language type for validation")
+    parser.add_argument("--mc_count", type=int, default=20, help="number of mcts rollout")
+    parser.add_argument("--train_rounds", type=int, default=200, help="number of self play")
     args = parser.parse_args()  # inject add_argument parts
+    mc_count = args.mc_count
+    train_rounds = args.train_rounds
 
     os.environ["HF_HOME"] = os.path.join(args.nas_base_path, "cache")
     os.environ["HF_DATASETS_CACHE"]=os.path.join(args.nas_base_path, "cache")
@@ -497,29 +503,38 @@ if __name__=="__main__":
         args = parser.parse_args_into_dataclasses()[0]  # initialize default huggingface parameters
         vllm_inference_onair(args, override_cache=True)
     elif args.mode== "RL":
-        dist.init_process_group(backend="nccl", timeout=datetime.timedelta(days=1))
+        if torch.cuda.is_available():
+            backend = "nccl"
+        elif torch.npu.is_available():
+            backend = "hccl"
+        else:
+            backend = "gloo"
+        dist.init_process_group(backend=backend, timeout=datetime.timedelta(days=1))
         src_lan_code = args.src_code
         trg_lan_code = args.trg_code
         args = parser.parse_args_into_dataclasses()[0]  # initialize default huggingface parameters
         sft_LLM(args, force_lora=True)
-        wandb.finish()
+        if "wandb" in args.report_to:
+            wandb.finish()
         dist.barrier()
-        if dist.get_rank()==0:
+        if dist.get_rank()==0 and "wandb" in args.report_to:
             wandb.init()
             wandb.define_metric("loss", step_metric="step")
             wandb.define_metric("bleurt", step_metric="step")
             wandb.define_metric("comet", step_metric="step")
+        print("<<<<<<<<<<<<<< Start Val <<<<<<<<<<<<<<<<<")
         validate_pair(
             args,flores_script=args.flores_script,
             src_lang_code=src_lan_code, trg_lang_code=trg_lan_code,
             global_step=0
         )
+        print("<<<<<<<<<<<<<< End Val <<<<<<<<<<<<<<<<<")
         global multilingual_dataloader
         multilingual_dataloader = build_multilingual_dataloader(
             args.self_play_languages, args.nas_base_path, batch_size=10
         )
-        for train_round in range(200):
-            self_play(args, train_round, trg_lang_codes=args.self_play_languages)
+        for train_round in range(train_rounds):
+            self_play(args, train_round, trg_lang_codes=args.self_play_languages, mc_count=mc_count)
             dist.barrier()
             RL_update(args, train_round)
             dist.barrier()
@@ -539,12 +554,18 @@ if __name__=="__main__":
             # break
 
     elif args.mode=="debug_RL":
-        dist.init_process_group(backend="nccl", timeout=datetime.timedelta(days=1))
+        if torch.cuda.is_available():
+            backend = "nccl"
+        elif torch.npu.is_available():
+            backend = "hccl"
+        else:
+            backend = "gloo"
+        dist.init_process_group(backend=backend, timeout=datetime.timedelta(days=1))
         src_lan_code = args.src_code
         trg_lan_code = args.trg_code
         args = args = parser.parse_args_into_dataclasses()[0]
         dist.barrier()
-        if dist.get_rank()==0:
+        if dist.get_rank()==0 and "wandb" in args.report_to:
             wandb.init()
             wandb.define_metric("loss", step_metric="step")
             wandb.define_metric("bleurt", step_metric="step")

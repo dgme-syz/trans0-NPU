@@ -27,114 +27,162 @@ from modules.metrics import BleurtScorer, CometScorer
 from modules.NaryTree import *
 from utils.common_utils import (
     aggregate_rejection,
-    free_gpu,
+    free_gpu,              # ✅ 使用你已经改过的版本
     get_path,
     print_once,
     set_special_tokens,
 )
 
+# ============================================================
+# Unified device definition (CUDA / NPU / CPU)
+# ============================================================
+
+def get_device():
+    if hasattr(torch, "npu") and torch.npu.is_available():
+        return torch.device("npu")
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    return torch.device("cpu")
+
+
+# ============================================================
+# TransAgent
+# ============================================================
+
 class TransAgent:
-    # wrap the methods and functions for trans0.
     def __init__(self, args, train=None, override_cache=False, metric_type="bleurt"):
-        # initiate agent by SFTed LLM for translation.
-        self.args = args  # reserve the parameters
+        self.args = args
+        self.device = get_device()
+        print_once(f">>> Using device: {self.device}")
+
+        if dist.is_initialized():
+            local_rank = int(os.environ.get("LOCAL_RANK", 0))
+            if self.device.type == "cuda":
+                torch.cuda.set_device(local_rank)
+            elif self.device.type == "npu":
+                torch.npu.set_device(local_rank)
+
         self.self_play_lang_codes = args.self_play_languages
         self.sample_size = args.mcts_sample_size
         self.language_detector = LanguageDetectorBuilder.from_all_languages().build()
-        # agent's cache
-        self.cache_dir = os.path.join(get_path(args, args.cache_dir), args.output_dir.split("/")[-1], "trans0_agent")
+
+        self.cache_dir = os.path.join(
+            get_path(args, args.cache_dir),
+            args.output_dir.split("/")[-1],
+            "trans0_agent"
+        )
+
         self.train_count = train
-        if train is None:  # override the cache
+        if train is None:
             if os.path.exists(self.cache_dir) and override_cache:
                 os.system(f"rm -rf {self.cache_dir}")
             os.makedirs(self.cache_dir, exist_ok=True)
         else:
-            assert os.path.exists(self.cache_dir), f">>>cache required {self.cache_dir} lost!!"
-        self.agent_out_dir = os.path.join(get_path(args, args.output_dir),"_RL") # RL tuning savings
-        if os.path.exists(os.path.join(self.agent_out_dir,"trainer_state.json")):
-            ckpt_path = self.agent_out_dir
-        else:
-            ckpt_path = get_path(args, args.output_dir) # no exsiting RL tuning
-        print_once(f">>>loading the agent from {ckpt_path}")
+            assert os.path.exists(self.cache_dir), f">>> cache required {self.cache_dir} lost!!"
+
+        self.agent_out_dir = os.path.join(get_path(args, args.output_dir), "_RL")
+        ckpt_path = (
+            self.agent_out_dir
+            if os.path.exists(os.path.join(self.agent_out_dir, "trainer_state.json"))
+            else get_path(args, args.output_dir)
+        )
+        print_once(f">>> loading the agent from {ckpt_path}")
 
         self.tokenizer = AutoTokenizer.from_pretrained(
             ckpt_path,
-            model_max_length=args.max_length,  # controls the maximum PE
-            padding_side = args.padding_side,
-            truncation_size = args.truncation_side,
+            model_max_length=args.max_length,
+            padding_side=args.padding_side,
+            truncation_size=args.truncation_side,
             trust_remote_code=True
         )
-        self.base=None  # base is the ref model in DPO training and BT evaluation in MCTS simulation.
+
+        dtype = torch.bfloat16 if self.device.type != "cpu" else torch.float32
+        self.base = None
+
         if args.use_lora:
-            if train is not None:  # training mode
+            if train is not None:
                 llm_base = AutoModelForCausalLM.from_pretrained(
-                    ckpt_path, trust_remote_code=True #,device_map=f"cuda:{dist.get_rank()}"
-                    ).to("cuda")
-                # print(f">> base size: {ckpt_path}>>: ", llm_base.num_parameters()) #
-                self.model = get_peft_model(
-                    llm_base, peft_config=sp_peft_config)
-                # print(f">> reloaded: {ckpt_path}>>: ", self.model.num_parameters()) #
-                self.model.print_trainable_parameters()  # the base model is the SFTe-initiated model
+                    ckpt_path,
+                    trust_remote_code=True,
+                    torch_dtype=dtype
+                ).to(self.device)
+
+                self.model = get_peft_model(llm_base, sp_peft_config)
+                self.model.print_trainable_parameters()
+
                 self.base = AutoModelForCausalLM.from_pretrained(
-                    get_path(args, args.output_dir), load_in_8bit=False, trust_remote_code=True,
-                    torch_dtype=torch.bfloat16)
+                    get_path(args, args.output_dir),
+                    trust_remote_code=True,
+                    torch_dtype=dtype
+                ).to(self.device)
             else:
                 self.model = AutoModelForCausalLM.from_pretrained(
-                    ckpt_path, trust_remote_code=True #,device_map=f"cuda:{dist.get_rank()}"
-                    ).to("cuda")
+                    ckpt_path,
+                    trust_remote_code=True,
+                    torch_dtype=dtype
+                ).to(self.device)
                 self.base = self.model
         else:
             if train is not None:
                 self.model = AutoModelForCausalLM.from_pretrained(
-                    ckpt_path, load_in_8bit=False, trust_remote_code=True,
-                    torch_dtype=torch.bfloat16)
+                    ckpt_path, 
+                    trust_remote_code=True,
+                    torch_dtype=dtype
+                ).to(self.device)
                 self.model.config.use_cache = False
                 self.base = AutoModelForCausalLM.from_pretrained(
-                    get_path(args, args.output_dir), load_in_8bit=False, trust_remote_code=True,
-                    torch_dtype=torch.bfloat16)
+                    get_path(args, args.output_dir), 
+                    trust_remote_code=True,
+                    torch_dtype=dtype
+                ).to(self.device)
             else:
                 self.model = AutoModelForCausalLM.from_pretrained(
-                    ckpt_path, trust_remote_code=True #, device_map=f"cuda:{dist.get_rank()}"
-                    ).to("cuda")
-                self.base=self.model
-                # self.base = AutoModelForCausalLM.from_pretrained(
-                #     args.output_dir, trust_remote_code=True, device_map=f"cuda:{dist.get_rank()}")
+                    ckpt_path,
+                    trust_remote_code=True,
+                    torch_dtype=dtype
+                ).to(self.device)
+                self.base = self.model
 
         self.model, self.tokenizer = set_special_tokens(self.model, self.tokenizer)
-        self.model.is_parallelizable=True
-        self.model.model_parallel=True
+        self.model.is_parallelizable = True
+        self.model.model_parallel = True
 
         self.metric_type = metric_type
-        if self.metric_type=="chrf":
+        if metric_type == "chrf":
             self.scorer = CHRF()
-        elif self.metric_type=="bleu":
+        elif metric_type == "bleu":
             self.scorer = BLEU()
-        elif self.metric_type=="bleurt":
-            self.scorer = BleurtScorer(get_path(args,args.bleurt_ckpt), batch_size=25)
-        elif self.metric_type=="comet":
+        elif metric_type == "bleurt":
+            self.scorer = BleurtScorer(get_path(args, args.bleurt_ckpt), batch_size=25)
+        elif metric_type == "comet":
             self.scorer = CometScorer(get_path(args, args.comet_ckpt), batch_size=25)
-            self.scorer.load_cuda(self.model.device)
+            if hasattr(self.scorer, "load_cuda"):
+                self.scorer.load_cuda(self.device)
         else:
-            raise ValueError("Invalid metric_type. Please choose from 'chrf', 'bleu', or 'bleurt'.")
-
+            raise ValueError("Invalid metric_type")
 
         self.generate_config = GenerationConfig(
             max_new_tokens=args.max_new_tokens,
-            temperature=0.1, do_sample=True,
+            temperature=0.1,
+            do_sample=True,
             bos_token_id=self.tokenizer.bos_token_id,
             eos_token_id=self.tokenizer.eos_token_id,
             pad_token_id=self.tokenizer.pad_token_id,
             num_return_sequences=1,
-        )  # for generation
+        )
+
         self.sample_config = GenerationConfig(
             max_new_tokens=args.max_new_tokens,
-            temperature=0.5, do_sample=True,
+            temperature=0.5,
+            do_sample=True,
             bos_token_id=self.tokenizer.bos_token_id,
             eos_token_id=self.tokenizer.eos_token_id,
             pad_token_id=self.tokenizer.pad_token_id,
             num_return_sequences=self.sample_size,
-        )  # for sampling
-        total_device_count = dist.get_world_size()
+        )
+
+        total_device_count = dist.get_world_size() if dist.is_initialized() else 1
+
         self.pref_train_config = DPOConfig(
             logging_steps=args.logging_steps,
             max_length=args.max_length,
@@ -142,23 +190,24 @@ class TransAgent:
             output_dir=self.agent_out_dir,
             learning_rate=args.rl_learning_rate,
             lr_scheduler_type=args.rl_lr_scheduler_type,
-            loss_type=args.rl_loss_type, #cpo_alpha=.0,
+            loss_type=args.rl_loss_type,
             per_device_train_batch_size=1,
             deepspeed=args.deepspeed,
-            gradient_accumulation_steps=int(args.rl_batch_size//total_device_count),
+            gradient_accumulation_steps=int(args.rl_batch_size // total_device_count),
             resume_from_checkpoint=True,
             save_strategy="no",
+            report_to=args.report_to,
             remove_unused_columns=args.remove_unused_columns,
-            bf16=args.bf16,
-            tf32=args.tf32
+            bf16=args.bf16 and self.device.type != "cpu",
+            tf32=args.tf32 and self.device.type == "cuda",
         )
-        # default translate prompt for MCTS inference and RL update
+
         if "alma" in args.output_dir.lower():
-            self.default_prompt  = TRANS_PROMPTS[1]
+            self.default_prompt = TRANS_PROMPTS[1]
         elif "tower" in args.output_dir.lower():
-            self.default_prompt  = TRANS_PROMPTS[2]
+            self.default_prompt = TRANS_PROMPTS[2]
         else:
-            self.default_prompt  = TRANS_PROMPTS[0]
+            self.default_prompt = TRANS_PROMPTS[0]
 
         self.supported_langs = LangCodes()
 
@@ -566,7 +615,7 @@ class TransAgent:
             if self.tokenizer.chat_template is not None:
                 formated_inputs_list = [self.tokenizer.apply_chat_template(
                     make_mt_instruction(l, llm_path=self.tokenizer.name_or_path),
-                    tokenize=False, add_generation_prompt=True) for l in inputs_list]
+                    tokenize=False, add_generation_prompt=True, enable_thinking=False) for l in inputs_list]
                 model_inputs = self.tokenizer(formated_inputs_list, return_tensors="pt", padding=True).to(llm.device)
             else:
                 if "alma" in self.tokenizer.name_or_path.lower():
@@ -614,8 +663,9 @@ class TransAgent:
             self.base,
             args=self.pref_train_config,
             train_dataset=tuning_dataset,
-            tokenizer=self.tokenizer,
-            force_use_ref_model=True
+            # tokenizer=self.tokenizer,
+            # force_use_ref_model=True 
+            # force_use_ref_model used for LoRA
         )
         train_results = rl_trainer.train(
             # resume_from_checkpoint=True if os.path.exists(os.path.join(self.agent_out_dir, "trainer_state.json")) else None

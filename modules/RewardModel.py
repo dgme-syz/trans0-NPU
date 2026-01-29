@@ -5,11 +5,21 @@ from transformers import AutoConfig, AutoTokenizer, MistralForCausalLM
 
 # the path to a well-trained PPO reward model
 reward_model_dir="/mnt/bn/v2024/models/reward_model/"
+
+
+def get_default_device():
+    if hasattr(torch, "npu") and torch.npu.is_available():
+        return torch.device("npu")
+    elif torch.cuda.is_available():
+        return torch.device("cuda")
+    else:
+        return torch.device("cpu")
+
 class RewardModel:
     def __init__(self, model_dir):
         config = AutoConfig.from_pretrained(model_dir)
         config._attn_implementation = "flash_attention_2"
-        self.device = torch.device('cuda')
+        self.device = get_default_device()
         self.model = MistralForCausalLM(config)
         self.model.lm_head = nn.Linear(config.hidden_size, 1, bias=False)
         self.tokenizer = AutoTokenizer.from_pretrained(model_dir)

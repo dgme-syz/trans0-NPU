@@ -5,7 +5,7 @@ from vllm import LLM, SamplingParams
 from collections import OrderedDict
 from configs.prompts import TRANS_PROMPTS, LABEL_MARK, make_mt_instruction
 from configs.lang_codes import LangCodes
-from utils.common_utils import print_once, set_special_tokens, check_available_memory, get_path
+from utils.common_utils import print_once, set_special_tokens, get_path
 from modules.data import read_rawline_data
 from modules.agent import TransAgent
 from torch.utils.data import DataLoader
@@ -18,50 +18,93 @@ import torch, time, json
 import gc, os, glob
 import pandas as pd
 
+# -------------------- 统一设备管理 --------------------
+if torch.npu.is_available():
+    device = torch.device("npu:0")
+elif torch.cuda.is_available():
+    device = torch.device("cuda:0")
+else:
+    device = torch.device("cpu")
+
+# -------------------- 工具函数 --------------------
+def empty_cache():
+    if torch.npu.is_available():
+        import torch_npu
+        torch.npu.empty_cache()
+    elif torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+def check_available_memory(device_index: int):
+    """返回设备可用内存 GB"""
+    if torch.cuda.is_available():
+        dev = torch.device(f"cuda:{device_index}")
+        props = torch.cuda.get_device_properties(dev)
+        used = torch.cuda.memory_allocated(dev)
+        return (props.total_memory - used) / 1024.0 / 1024.0 / 1024.0
+    elif torch.npu.is_available():
+        import torch_npu
+        dev = f"npu:{device_index}"
+        props = torch_npu.npu.get_device_properties(dev)
+        used = torch_npu.npu.memory_allocated(dev)
+        return (props.total_memory - used) / 1024.0 / 1024.0 / 1024.0
+    else:
+        return 0.0
+
+def get_device_count():
+    if torch.npu.is_available():
+        import torch_npu
+        return torch.npu.device_count()
+    elif torch.cuda.is_available():
+        return torch.cuda.device_count()
+    else:
+        return 1
+
+# -------------------- LLM --------------------
 lang_codes = LangCodes()
 
-def prepare_vllm_inference(args, model_dir=None,override_cache=True, cache_suffix=""):
-    """
-    build vllm for lora adapted LLM
-    """
+def prepare_vllm_inference(args, model_dir=None, override_cache=True, cache_suffix=""):
     target_model_path = get_path(args, args.output_dir) if model_dir is None else model_dir
     print_once(f">>> loading from >>>:{target_model_path}" )
     
-    available_gpu = check_available_memory(device_index=0)
-    gpu_utilization = min(35.0/available_gpu, 0.9)
+    available_mem = check_available_memory(device_index=0)
+    gpu_utilization = min(35.0 / max(available_mem, 1e-6), 0.9)
+    n_devices = get_device_count()
+
     if args.use_lora:
-        if override_cache or not os.path.exists(os.path.join(get_path(args, args.cache_dir), "cache_merged_llm"+cache_suffix)):
+        cache_file = os.path.join(get_path(args, args.cache_dir), "cache_merged_llm"+cache_suffix)
+        if override_cache or not os.path.exists(cache_file):
             base_model = AutoModelForCausalLM.from_pretrained(
-                args.llm_path, trust_remote_code=True, device_map="auto")
+                args.llm_path, trust_remote_code=True, device_map="auto"
+            )
             peft_model = PeftModel.from_pretrained(base_model, target_model_path)
             merged_model = peft_model.merge_and_unload()
             merged_model.save_pretrained(os.path.join(args.cache_dir, "cache_merged_llm"))
             merged_model.to("cpu")
-            del(merged_model)
+            del merged_model
             gc.collect()
-            torch.cuda.empty_cache()
-            print_once("release gpu")
+            empty_cache()
+            print_once("release device memory")
         llm = LLM(
-            model=os.path.join(get_path(args, args.cache_dir), "cache_merged_llm"), dtype=torch.bfloat16 if args.bf16 else torch.float16,
-            tokenizer=target_model_path,  # the finetuned vocabulary
-            tensor_parallel_size=torch.cuda.device_count(),
-            gpu_memory_utilization=gpu_utilization,
+            model=os.path.join(get_path(args, args.cache_dir), "cache_merged_llm"),
+            dtype=torch.bfloat16 if args.bf16 else torch.float16,
+            tokenizer=target_model_path,
+            tensor_parallel_size=n_devices,
+            gpu_memory_utilization=gpu_utilization
         )
-    else: # direct loading from the checkpoint
-        print("preparing vllm with ", torch.cuda.device_count())
+    else:
+        print("preparing vllm with ", n_devices)
         llm = LLM(
-            model = target_model_path, dtype=torch.bfloat16 if args.bf16 else torch.float16,
-            tokenizer= target_model_path,  # the finetuned vocabulary
-            tensor_parallel_size=torch.cuda.device_count(),
-            gpu_memory_utilization=gpu_utilization,
+            model=target_model_path,
+            dtype=torch.bfloat16 if args.bf16 else torch.float16,
+            tokenizer=target_model_path,
+            tensor_parallel_size=n_devices,
+            gpu_memory_utilization=gpu_utilization
         )
         print("done")
     return llm
 
+# ----------------------------------------
 def vllm_inference_onair(args, override_cache=False):
-    """
-    :takes inputs from python console and infer on the fly
-    """
     os.environ["VLLM_WORKER_MULTIPROC_METHOD"]="spawn"
     sampling_params = SamplingParams(n=1, temperature=0., max_tokens=args.max_new_tokens)
     llm = prepare_vllm_inference(args, override_cache=override_cache)
@@ -72,24 +115,22 @@ def vllm_inference_onair(args, override_cache=False):
             tokenizer = llm.get_tokenizer()
             if tokenizer.chat_template is not None:
                 input_l = tokenizer.apply_chat_template(
-                    make_mt_instruction(input_l, llm_path=args.output_dir), tokenize=False, add_generation_prompt=True)
+                    make_mt_instruction(input_l, llm_path=args.output_dir),
+                    tokenize=False, add_generation_prompt=True
+                )
             generation_out = llm.generate([input_l], sampling_params)
             for item in generation_out:
                 for item_out in item.outputs:
-                    # l = item_out.text.replace("\n", " ").strip()
                     l = item_out.text
                     print(">>> model input: >>>", input_l)
                     if LABEL_MARK in l:
-                        mark_index=l.index(LABEL_MARK)
+                        mark_index = l.index(LABEL_MARK)
                         print(l.strip()[mark_index:].replace(LABEL_MARK, ""))
                     else:
-                        print(">>>> "+l+"\n")
+                        print(">>>> " + l + "\n")
 
-
+# ----------------------------------------
 def vllm_inference(args, inputs_list, src_lang_code, trg_lang_code, override_cache=False):
-    """
-    :param input_lists: inputs are raw lines ["line1", "line2",...]
-    """
     trans_prompt = TRANS_PROMPTS[0]
     input_ls = [
         trans_prompt.format(
@@ -99,67 +140,47 @@ def vllm_inference(args, inputs_list, src_lang_code, trg_lang_code, override_cac
         for l in inputs_list
     ]
     os.environ["VLLM_WORKER_MULTIPROC_METHOD"]="spawn"
-    sampling_params = SamplingParams(
-        n=1, temperature=0, max_tokens=args.max_new_tokens)
-    # reload the LLM ckpt (the transformer repo)
-    llm = prepare_vllm_inference(
-        args, model_dir=None, 
-        override_cache=override_cache)
+    sampling_params = SamplingParams(n=1, temperature=0, max_tokens=args.max_new_tokens)
+    llm = prepare_vllm_inference(args, model_dir=None, override_cache=override_cache)
     tokenizer = llm.get_tokenizer()
     if tokenizer.chat_template is not None:
         input_ls = [
             tokenizer.apply_chat_template(
-                    make_mt_instruction(l, llm_path=args.output_dir), tokenize=False,
-                    add_generation_prompt=True)
-            for l in input_ls
+                make_mt_instruction(l, llm_path=args.output_dir),
+                tokenize=False, add_generation_prompt=True
+            ) for l in input_ls
         ]
     else:
-        input_ls =[
-            l+LABEL_MARK for l in input_ls
-        ]
-    generation_out = llm.generate(
-        input_ls, sampling_params=sampling_params)
+        input_ls = [l + LABEL_MARK for l in input_ls]
+    generation_out = llm.generate(input_ls, sampling_params=sampling_params)
     return generation_out
 
-def distributed_inference(args, llm_dir, input_lists, src_lang_code, trg_lang_code, override_cache=False,cache_suffix=""):
-    """
-    :param input_lists: inputs are raw lines ["line1", "line2",...]
-    :param llm_dir: the model for validation, default using the model in args.output_dir
-    """
-    # if args.test_data_path is not None:
-    #     cache_path = os.path.join(get_path(args, args.cache_dir), args.test_data_path.split("/")[-1].strip())
-    # else:
-    #     cache_path = os.path.join(get_path(args, args.cache_dir), args.dev_data_path.split("/")[-1].strip())
-    if cache_suffix=="":
-        cache_path = os.path.join(get_path(args, args.cache_dir), "cached_inference")
-    else:
-        cache_path = os.path.join(get_path(args, args.cache_dir), "cached_inference_"+cache_suffix)
-    if override_cache:
-        os.system(f"rm -rf %s"%cache_path)
-    try:
-        os.makedirs(cache_path, exist_ok=True)
-    except FileExistsError:
-        pass
+# ----------------------------------------
+def distributed_inference(args, llm_dir, input_lists, src_lang_code, trg_lang_code, override_cache=False, cache_suffix=""):
+    cache_path = os.path.join(get_path(args, args.cache_dir), "cached_inference"+("_"+cache_suffix if cache_suffix else ""))
+    if override_cache and dist.get_rank() == 0:
+        os.system(f"rm -rf {cache_path}")
+    os.makedirs(cache_path, exist_ok=True)
 
     target_model_path = get_path(args, args.output_dir) if llm_dir is None else llm_dir
-    print_once(f">>> validate trg output_dir >>>:{target_model_path}" )
-    # reload the LLM ckpt from the output_dir
+    print_once(f">>> validate trg output_dir >>>:{target_model_path}")
+
     tokenizer = AutoTokenizer.from_pretrained(
         target_model_path,
         model_max_length=args.max_length,
-        padding_side = "left",
-        truncation_size = "left",
-        trust_remote_code=True)
-    time.sleep(int(os.environ["ARNOLD_WORKER_NUM"])*10)
-    llm = AutoModelForCausalLM.from_pretrained(
-        target_model_path, trust_remote_code=True,
-        use_cache=True#, device_map=f"cuda:{dist.get_rank()}"
-    ).to("cuda")
+        padding_side="left",
+        truncation_size="left",
+        trust_remote_code=True
+    )
 
-    # llm.is_parallelizable=True
-    # llm.model_parallel=True
-    llm, tokenizer = set_special_tokens(llm, tokenizer)  # set special tokens
-    llm.eval()  # evaluation mode
+    time.sleep(int(os.environ.get("ARNOLD_WORKER_NUM", 1)) * 10)
+    llm = AutoModelForCausalLM.from_pretrained(
+        target_model_path, trust_remote_code=True, use_cache=True
+    ).to(device)
+
+    llm, tokenizer = set_special_tokens(llm, tokenizer)
+    llm.eval()
+
     generation_config = GenerationConfig(
         max_new_tokens=args.max_new_tokens,
         do_sample=False,
@@ -167,96 +188,69 @@ def distributed_inference(args, llm_dir, input_lists, src_lang_code, trg_lang_co
         eos_token_id=tokenizer.eos_token_id,
         pad_token_id=tokenizer.pad_token_id,
         num_return_sequences=1,
-    )  # for huggingface generation
+    )
 
-    # specific test dataset by distributed sampler for evaluation
     sampler = torch.utils.data.distributed.DistributedSampler(input_lists, shuffle=False)
-    data_loader = DataLoader(
-        input_lists, shuffle=False,
-        batch_size=args.per_device_eval_batch_size,
-        sampler=sampler)
+    data_loader = DataLoader(input_lists, shuffle=False, batch_size=args.per_device_eval_batch_size, sampler=sampler)
+
     dist_outs = []
     progress_bar = tqdm(range(len(data_loader)), disable=(dist.get_rank() != 0))
     for _, batch_lines in enumerate(data_loader):
         progress_bar.update(1)
-        processed_batch = test_data_collector(
-            batch_lines,
-            tokenizer=tokenizer,
-            src_lang_code=src_lang_code,
-            trg_lang_code=trg_lang_code,
-        )
-        input_ids = processed_batch["input_ids"].to(llm.device)
+        processed_batch = test_data_collector(batch_lines, tokenizer=tokenizer, src_lang_code=src_lang_code, trg_lang_code=trg_lang_code)
+        input_ids = processed_batch["input_ids"].to(device)
         with torch.no_grad():
             generation_out = llm.generate(
                 input_ids=input_ids,
-                attention_mask=processed_batch["attention_mask"].to(llm.device),
-                generation_config=generation_config, return_dict_in_generate=True
+                attention_mask=processed_batch["attention_mask"].to(device),
+                generation_config=generation_config,
+                return_dict_in_generate=True
             )
-        output_seq =generation_out.sequences.reshape(
-            input_ids.shape[0], generation_config.num_return_sequences, -1)
+        output_seq = generation_out.sequences.reshape(input_ids.shape[0], generation_config.num_return_sequences, -1)
         input_length = input_ids.shape[1]
         output_seq = output_seq[:, :, input_length:]
         for out_l in output_seq:
             processed_out = tokenizer.batch_decode(out_l, skip_special_tokens=True)[0].replace("\n", " ")
             dist_outs.append(processed_out)
 
-    with open(os.path.join(cache_path, f"rank_{dist.get_rank()}" ), "w") as cache_file:
-        print(">>>> cache to rank", dist.get_rank())
+    # crazy, code lost
+    with open(os.path.join(cache_path, f"rank_{dist.get_rank()}"), "w") as cache_file:
         for l in dist_outs:
-            cache_file.write(l+ "\n")
-    torch.cuda.empty_cache()
-    dist.barrier()   # wait for all threads to finish
+            cache_file.write(l + "\n")
+
+
+    empty_cache()
+    dist.barrier()
 
     merged_results = []
-    if dist.get_rank()==0:  # merge by the first thread
-        # collect files
-        cache_paths = glob.glob(os.path.join(cache_path, "rank_*"))
-        sorted_paths = sorted(cache_paths, key=lambda x:int(x.split("rank_")[1]))
-        results_for_each_file = []
-        for res_path in sorted_paths:
-            new_results = read_rawline_data(res_path)
-            results_for_each_file.append(new_results)
+    if dist.get_rank() == 0:
+        cache_paths = sorted(glob.glob(os.path.join(cache_path, "rank_*")), key=lambda x: int(x.split("rank_")[1]))
+        results_for_each_file = [read_rawline_data(p) for p in cache_paths]
         while True:
             for sublist in results_for_each_file:
                 if sublist:
-                    if len(merged_results)>= len(input_lists):
+                    if len(merged_results) >= len(input_lists):
                         break
-                    merged_results.append(sublist[0])
-                    sublist.pop(0)
-                else:
-                    break
-            if len(merged_results)>=len(input_lists) or all(not sublist for sublist in results_for_each_file):
+                    merged_results.append(sublist.pop(0))
+            if len(merged_results) >= len(input_lists) or all(not sublist for sublist in results_for_each_file):
                 break
     return merged_results
 
-def distributed_inference_by_mcts(args, llm_dir, input_lists,  override_cache=False, cache_suffix=""):
-    """
-    :param input_lists: inputs are raw lines ["line1", "line2",...]
-    :param llm_dir: the model for validation, default using the model in args.output_dir
-    """
-    if cache_suffix=="":
-        cache_path = os.path.join(get_path(args, args.cache_dir), "cached_inference")
-    else:
-        cache_path = os.path.join(get_path(args, args.cache_dir), "cached_inference_"+cache_suffix)
-    if dist.get_rank()==0:
+# -------------------- MCTS --------------------
+def distributed_inference_by_mcts(args, llm_dir, input_lists, override_cache=False, cache_suffix=""):
+    cache_path = os.path.join(get_path(args, args.cache_dir), "cached_inference"+("_"+cache_suffix if cache_suffix else ""))
+    if dist.get_rank() == 0:
         if override_cache:
-            os.system(f"rm -rf %s"%cache_path)
-        try:
-            os.makedirs(cache_path, exist_ok=True)
-        except FileExistsError:
-            pass
+            os.system(f"rm -rf {cache_path}")
+        os.makedirs(cache_path, exist_ok=True)
 
     target_model_path = get_path(args, args.output_dir) if llm_dir is None else llm_dir    
-    print_once(f">>> validate trg output_dir >>>:{target_model_path}" )
-    # reload the LLM ckpt for mcts 
-    agent = TransAgent(args)
+    print_once(f">>> validate trg output_dir >>>:{target_model_path}")
 
-    # specific test dataset by distributed sampler for evaluation
+    agent = TransAgent(args)
     sampler = torch.utils.data.distributed.DistributedSampler(input_lists, shuffle=False)
-    data_loader = DataLoader(
-        input_lists, shuffle=False,
-        batch_size=args.per_device_eval_batch_size,
-        sampler=sampler)
+    data_loader = DataLoader(input_lists, shuffle=False, batch_size=args.per_device_eval_batch_size, sampler=sampler)
+
     dist_outs = []
     dist_preference_dfs = []
     progress_bar = tqdm(range(len(data_loader)), disable=(dist.get_rank() != 0))
@@ -274,59 +268,43 @@ def distributed_inference_by_mcts(args, llm_dir, input_lists,  override_cache=Fa
             root_data, root_value = item_list.pop(0)
             cleaned_dict = OrderedDict()
             for item_data, item_value in item_list:
-                if item_data not in cleaned_dict:
-                    cleaned_dict[item_data] = [item_value]
-                else:
-                    cleaned_dict[item_data].append(item_value)
-            cleaned_list = [(item_data, (np.array(item_value)).sum()) for item_data, item_value in cleaned_dict.items()]
-            # for item_data, item_value in cleaned_list:
-            #     print(f"{item_value}:{item_data}")
-            best_result = max(cleaned_list, key=lambda x:x[1]) # max item value 
+                cleaned_dict.setdefault(item_data, []).append(item_value)
+            cleaned_list = [(item_data, np.sum(item_value)) for item_data, item_value in cleaned_dict.items()]
+            best_result = max(cleaned_list, key=lambda x: x[1])
             print(f"{root_data} ===> {best_result[0]}", end=" ")
             print(processed_line[2])
             dist_outs.append(best_result[0])
-            df=agent.yield_tree2rank(mc_tree, threshold=root_value, value_type="utility")
+            df = agent.yield_tree2rank(mc_tree, threshold=root_value, value_type="utility")
             dist_preference_dfs.append(df)
-    local_df = pd.concat(dist_preference_dfs, ignore_index=True)
-    save_path = os.path.join(
-        cache_path, f"preference_{dist.get_rank()}.csv"
-    )
-    local_df.to_csv(save_path, index=False)
 
-    with open(os.path.join(cache_path, f"rank_{dist.get_rank()}" ), "w") as cache_file:
-        print(">>>> cache to rank", dist.get_rank())
+    local_df = pd.concat(dist_preference_dfs, ignore_index=True)
+    local_df.to_csv(os.path.join(cache_path, f"preference_{dist.get_rank()}.csv"), index=False)
+
+    with open(os.path.join(cache_path, f"rank_{dist.get_rank()}"), "w") as cache_file:
         for l in dist_outs:
-            cache_file.write(l+ "\n")
-    torch.cuda.empty_cache()
-    dist.barrier()   # wait for all threads to finish
+            cache_file.write(l + "\n")
+
+    empty_cache()
+    dist.barrier()
 
     merged_results = []
-    if dist.get_rank()==0:  # merge by the first thread
-        # collect files
-        cache_paths = glob.glob(os.path.join(cache_path, "rank_*"))
-        sorted_paths = sorted(cache_paths, key=lambda x:int(x.split("rank_")[1]))
-        results_for_each_file = []
-        for res_path in sorted_paths:
-            new_results = read_rawline_data(res_path)
-            results_for_each_file.append(new_results)
+    if dist.get_rank() == 0:
+        cache_paths = sorted(glob.glob(os.path.join(cache_path, "rank_*")), key=lambda x: int(x.split("rank_")[1]))
+        results_for_each_file = [read_rawline_data(p) for p in cache_paths]
         while True:
             for sublist in results_for_each_file:
                 if sublist:
-                    if len(merged_results)>= len(input_lists):
+                    if len(merged_results) >= len(input_lists):
                         break
-                    merged_results.append(sublist[0])
-                    sublist.pop(0)
-                else:
-                    break
-            if len(merged_results)>=len(input_lists) or all(not sublist for sublist in results_for_each_file):
+                    merged_results.append(sublist.pop(0))
+            if len(merged_results) >= len(input_lists) or all(not sublist for sublist in results_for_each_file):
                 break
 
-        df_path=glob.glob(os.path.join(cache_path, "preference_*"))
-        collected_df = []
-        for file in df_path:
-            collected_df.append(pd.read_csv(file))
+        df_path = glob.glob(os.path.join(cache_path, "preference_*"))
+        collected_df = [pd.read_csv(f) for f in df_path]
         merged_df = pd.concat(collected_df, ignore_index=True)
         merged_df.fillna("", inplace=True)
-        merged_df.to_csv(os.path.join(cache_path, "total_preference.csv"), index=False)    
-    print(">>merged_results>>:",merged_results)
+        merged_df.to_csv(os.path.join(cache_path, "total_preference.csv"), index=False)
+
+    print(">>merged_results>>:", merged_results)
     return merged_results

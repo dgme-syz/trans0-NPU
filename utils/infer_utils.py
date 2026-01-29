@@ -18,7 +18,15 @@ def process_flores_test(flores_script, src_lang_code, trg_lang_code, output_dir)
     # lang_codes = ["eng", "fra","zho_simpl", "deu", "rus", "kor", "jpn", "ara", "heb", "swh" ] # ,
     print(f"collect flores test on {src_lang_code} with {trg_lang_code}...")
     para_data = []
-    lan_pair = load_dataset(flores_script, f"{src_lang_code}-{trg_lang_code}", trust_remote_code=True )["devtest"]
+
+    from flores200 import Flores200
+    builder = Flores200(
+        config_name=f"{src_lang_code}-{trg_lang_code}",    
+    )
+    builder.download_and_prepare()
+    lan_pair = builder.as_dataset(split="devtest")
+    lan_pair = lan_pair.select(range(2))
+    #lan_pair = load_dataset(flores_script, f"{src_lang_code}-{trg_lang_code}", trust_remote_code=True )["devtest"]
     for i in range(len(lan_pair)):
         para_data.append(
             {src_lang_code:lan_pair[i][f"sentence_{src_lang_code}"], trg_lang_code: lan_pair[i][f"sentence_{trg_lang_code}"]}

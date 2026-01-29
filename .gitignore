@@ -13,7 +13,7 @@ bleurt/*
 *.zip
 *.DS_Store
 collect_data.py
-dataset/*
+
 output
 reproduce.py
 temp*
@@ -72,6 +72,7 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 cover/
+models/*
 
 # Translations
 *.mo

@@ -2,8 +2,37 @@ from typing import List
 from pathlib import Path
 from tqdm import trange
 import numpy as np
-import torch, os
+import torch
+import os
+import gc
+
 from utils.common_utils import truncate_encoded
+
+
+# =========================
+# device utils
+# =========================
+
+def get_default_device():
+    if hasattr(torch, "npu") and torch.npu.is_available():
+        return torch.device("npu")
+    elif torch.cuda.is_available():
+        return torch.device("cuda")
+    else:
+        return torch.device("cpu")
+
+
+def empty_cache(device):
+    gc.collect()
+    if device.type == "cuda":
+        torch.cuda.empty_cache()
+    elif device.type == "npu":
+        torch.npu.empty_cache()
+
+
+# =========================
+# helper
+# =========================
 
 def calculate_cum_size(arrays):
     cum_size = []
@@ -14,36 +43,53 @@ def calculate_cum_size(arrays):
         start_index = end_index
     return cum_size
 
+
+# =========================
+# abstract scorer
+# =========================
+
 class AbstractScorer(object):
     def score(self, references: List[str], hypothesizes: List[str]):
         raise NotImplementedError
 
     def batch_score(self, references: List[List[str]], hypothesizes: List[List[str]]):
-        """Compute score for multiple references and hypothesizes together"""
         raise NotImplementedError
 
-class BleurtScorer(AbstractScorer):
-    def __init__(self, ckpt_path: Path, batch_size: int = 32):
-        from bleurt_pytorch import BleurtForSequenceClassification, BleurtTokenizer
 
-        self.bleurt_scorer = BleurtForSequenceClassification.from_pretrained(
-            ckpt_path, device_map="cuda", trust_remote_code=True
+# =========================
+# BLEURT scorer
+# =========================
+
+class BleurtScorer(AbstractScorer):
+    def __init__(self, ckpt_path: Path, batch_size: int = 32, device=None):
+        from bleurt_pytorch import (
+            BleurtForSequenceClassification,
+            BleurtTokenizer,
         )
-        self.bleurt_tokenizer = BleurtTokenizer.from_pretrained(ckpt_path, trust_remote_code=True)
-        self.bleurt_scorer.eval()
+
+        self.device = device or get_default_device()
         self.batch_size = batch_size
 
-    def load_cuda(self):
-        self.bleurt_scorer = self.bleurt_scorer.to("cuda")
+        self.bleurt_scorer = BleurtForSequenceClassification.from_pretrained(
+            ckpt_path, trust_remote_code=True
+        ).to(self.device)
 
-    def offload_cuda(self):
-        self.bleurt_scorer = self.bleurt_scorer.to("cpu")
-        torch.cuda.empty_cache()
+        self.bleurt_tokenizer = BleurtTokenizer.from_pretrained(
+            ckpt_path, trust_remote_code=True
+        )
 
-    def _score(
-        self, references: List[str], hypothesizes: List[str], verbose: bool = False
-    ):
+        self.bleurt_scorer.eval()
+
+    def load_device(self):
+        self.bleurt_scorer.to(self.device)
+
+    def offload_device(self):
+        self.bleurt_scorer.to("cpu")
+        empty_cache(self.device)
+
+    def _score(self, references, hypothesizes, verbose=False):
         scores = []
+
         for i in trange(
             0,
             len(references),
@@ -56,89 +102,97 @@ class BleurtScorer(AbstractScorer):
                 hypothesizes[i : i + self.batch_size],
                 return_tensors="pt",
                 padding="longest",
-            ).to(self.bleurt_scorer.device)
+            ).to(self.device)
+
             trunc_inputs = truncate_encoded(inputs)
-            cur_scores = self.bleurt_scorer(**trunc_inputs).logits.flatten().tolist()
-            if i == 0:
-                scores = cur_scores
-            else:
-                scores += cur_scores
+
+            with torch.no_grad():
+                cur_scores = (
+                    self.bleurt_scorer(**trunc_inputs)
+                    .logits.flatten()
+                    .tolist()
+                )
+
+            scores.extend(cur_scores)
+
         return scores
 
     def score(self, references: List[str], hypothesizes: List[str], keepdims=False):
-        """
-        references: List of target sentences
-        hypothesizes: List of MT results
-        """
         scores = self._score(references, hypothesizes)
-        if keepdims:
-            return np.array(scores)
-        else:
-            score = np.array(scores).mean()
-            return score
+        scores = np.array(scores)
+        return scores if keepdims else scores.mean()
 
     def batch_score(self, references: List[List[str]], hypothesizes: List[List[str]]):
-        scores = []
         cum_size = calculate_cum_size(references)
-        cum_references = [ref for refs in references for ref in refs]
-        cum_hypothesizes = [hypo for hypos in hypothesizes for hypo in hypos]
+
+        cum_references = [r for refs in references for r in refs]
+        cum_hypothesizes = [h for hypos in hypothesizes for h in hypos]
 
         scores = self._score(cum_references, cum_hypothesizes)
 
         avg_scores = []
-        for cum in cum_size:
-            start, end = cum
-            score = np.array(scores[start:end]).mean()
-            avg_scores.append(score)
+        for start, end in cum_size:
+            avg_scores.append(np.array(scores[start:end]).mean())
+
         return avg_scores
 
+
+# =========================
+# COMET scorer
+# =========================
+
 class CometScorer(AbstractScorer):
-    def __init__(self, ckpt_path: Path, batch_size: int = 128):
+    def __init__(self, ckpt_path: Path, batch_size: int = 128, device=None):
         import comet
-        os.environ["TOKENIZERS_PARALLELISM"] = 'false'
-        self.comet_scorer = comet.load_from_checkpoint(ckpt_path, reload_hparams=True).cuda().eval()
+
+        os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
+        self.device = device or get_default_device()
         self.batch_size = batch_size
 
-    def load_cuda(self, device=None):
-        if device==None:
-            self.comet_scorer.to("cuda")
-        else:
-            self.comet_scorer.to(device)
-
-    def offload_cuda(self):
-        self.comet_scorer.to("cpu")
-        torch.cuda.empty_cache()
-
-    def _score(self, references: List[str], hypothesizes: List[str]):
-        data = [{"src": ref, "mt": hypo} for ref, hypo in zip(references, hypothesizes)]
-        comet_output = self.comet_scorer.predict(
-            data, batch_size=self.batch_size, gpus=1, progress_bar=False
+        self.comet_scorer = comet.load_from_checkpoint(
+            ckpt_path, reload_hparams=True
         )
-        scores = comet_output.scores
-        return scores
+
+        self.comet_scorer.to(self.device)
+        self.comet_scorer.eval()
+
+    def load_device(self):
+        self.comet_scorer.to(self.device)
+
+    def offload_device(self):
+        self.comet_scorer.to("cpu")
+        empty_cache(self.device)
+
+    def _score(self, references, hypothesizes):
+        data = [
+            {"src": ref, "mt": hypo}
+            for ref, hypo in zip(references, hypothesizes)
+        ]
+
+        with torch.no_grad():
+            comet_output = self.comet_scorer.predict(
+                data,
+                batch_size=self.batch_size,
+                progress_bar=False,
+            )
+
+        return comet_output.scores
 
     def score(self, references: List[str], hypothesizes: List[str], keepdims=False):
-        """
-        references: List of source sentences
-        hypothesizes: List of MT results
-        """
-        scores = self._score(references, hypothesizes)
-        if keepdims:
-            return np.array(scores)
-        else:
-            score = np.array(scores).mean()
-            return score
+        scores = np.array(self._score(references, hypothesizes))
+        return scores if keepdims else scores.mean()
 
     def batch_score(self, references: List[List[str]], hypothesizes: List[List[str]]):
         cum_size = calculate_cum_size(references)
-        cum_references = [ref for refs in references for ref in refs]
-        cum_hypothesizes = [hypo for hypos in hypothesizes for hypo in hypos]
+
+        cum_references = [r for refs in references for r in refs]
+        cum_hypothesizes = [h for hypos in hypothesizes for h in hypos]
 
         scores = self._score(cum_references, cum_hypothesizes)
 
         avg_scores = []
-        for cum in cum_size:
-            start, end = cum
-            score = np.array(scores[start:end]).mean()
-            avg_scores.append(score)
+        for start, end in cum_size:
+            avg_scores.append(np.array(scores[start:end]).mean())
+
         return avg_scores

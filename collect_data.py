@@ -142,9 +142,9 @@ def process_flores_instruct(flores_script, output_file, sample_size=-1):
     return
 # process_flores_instruct("/mnt/bn/v2024/dataset/flores200_dataset/flores.py", output_file="flores200.parquet")
 
-def process_flores_test(flores_script, src_lang_code, trg_lang_code, output_file="flores_test"):
+def process_flores_test(flores_script, src_lang_code, trg_lang_code, output_dir):
     """
-    extract the flores200 test data to parallel lines.
+    extract the flores200 test data of the specific lang-code2lang-code (parallel lines).
     df title: translation
     {src_lang_code: src_lang_sent, trg_lang_code: trg_lang_sent}
 
@@ -158,14 +158,22 @@ def process_flores_test(flores_script, src_lang_code, trg_lang_code, output_file
     # lang_codes = ["eng", "fra","zho_simpl", "deu", "rus", "kor", "jpn", "ara", "heb", "swh" ] # ,
     print(f"collect flores test on {src_lang_code} with {trg_lang_code}...")
     para_data = []
-    lan_pair = load_dataset(flores_script, f"{src_lang_code}-{trg_lang_code}", trust_remote_code=True )["devtest"]
+
+    from flores200 import Flores200
+    builder = Flores200(
+        config_name=f"{src_lang_code}-{trg_lang_code}",    
+    )
+    builder.download_and_prepare()
+    lan_pair = builder.as_dataset(split="devtest")
+    # lan_pair = lan_pair.select(range(2))
+    #lan_pair = load_dataset(flores_script, f"{src_lang_code}-{trg_lang_code}", trust_remote_code=True )["devtest"]
     for i in range(len(lan_pair)):
         para_data.append(
             {src_lang_code:lan_pair[i][f"sentence_{src_lang_code}"], trg_lang_code: lan_pair[i][f"sentence_{trg_lang_code}"]}
         )
     df = pd.DataFrame({"translation": para_data})
-    df.to_parquet(f"{output_file}_{src_lang_code}-{trg_lang_code}.parquet", index=False)
-    print(f"finsh at {output_file}_{src_lang_code}-{trg_lang_code}.parquet")
+    df.to_parquet(output_dir, index=False)
+    print(f"**** save at {output_dir}")
     return
 # process_flores_test("/mnt/bn/v2024/dataset/flores200_dataset/flores.py", "zho_Hans","arb_Arab")
 
