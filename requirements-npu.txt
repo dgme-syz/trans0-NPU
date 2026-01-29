@@ -1,0 +1,40 @@
+transformers >= 4.46.0
+datasets
+accelerate
+peft
+trl >= 0.12.0
+gradio
+sentencepiece
+openai
+# ray-default >= 2.9
+ray[default]
+fastapi
+sse-starlette
+uvicorn
+seaborn
+pydantic
+matplotlib
+deepspeed
+fire
+validators
+huggingface_hub
+prettytable
+sacrebleu
+bitsandbytes
+plotly
+# python-kaleido
+kaleido
+isort
+jsonlines
+protobuf
+gpustat
+tf-keras
+evaluate
+wandb
+pandas
+pytorch-lightning
+
+unbabel-comet
+lingua-language-detector
+git+https://github.com/lucadiliello/bleurt-pytorch.git
+git+https://github.com/google-research/bleurt.git

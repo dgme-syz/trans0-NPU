@@ -25,7 +25,7 @@ def process_flores_test(flores_script, src_lang_code, trg_lang_code, output_dir)
     )
     builder.download_and_prepare()
     lan_pair = builder.as_dataset(split="devtest")
-    lan_pair = lan_pair.select(range(2))
+    # lan_pair = lan_pair.select(range(2))
     #lan_pair = load_dataset(flores_script, f"{src_lang_code}-{trg_lang_code}", trust_remote_code=True )["devtest"]
     for i in range(len(lan_pair)):
         para_data.append(
