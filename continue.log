@@ -1,0 +1,368 @@
+path string is NULLpath string is NULLINFO 01-29 16:42:51 [__init__.py:43] Available plugins for group vllm.platform_plugins:
+INFO 01-29 16:42:51 [__init__.py:45] - ascend -> vllm_ascend:register
+INFO 01-29 16:42:51 [__init__.py:48] All plugins in this group will be loaded. Set `VLLM_PLUGINS` to control which plugins to load.
+INFO 01-29 16:42:51 [__init__.py:217] Platform plugin ascend is activated
+INFO 01-29 16:42:51 [importing.py:44] Triton is installed but 0 active driver(s) found (expected 1). Disabling Triton to prevent runtime errors.
+INFO 01-29 16:42:51 [importing.py:68] Triton not installed or not compatible; certain GPU-related functions will not be available.
+>>> load data from ././dataset/sft/example.jsonl
+DefaultTrainingArguments(
+_n_gpu=1,
+accelerator_config={'split_batches': False, 'dispatch_batches': None, 'even_batches': True, 'use_seedable_sampler': True, 'non_blocking': False, 'gradient_accumulation_kwargs': None, 'use_configured_state': False},
+adafactor=False,
+adam_beta1=0.9,
+adam_beta2=0.999,
+adam_epsilon=1e-08,
+add_sep_token=<ADD_SEP_TOKEN>,
+auto_find_batch_size=False,
+average_tokens_across_devices=True,
+batch_eval_metrics=False,
+bf16=False,
+bf16_full_eval=False,
+bleurt_ckpt=models/huggingface/bleurt20/,
+cache_dir=cache/qwen_debug/,
+clip_range=0.2,
+comet_ckpt=models/Unbabel/wmt22-cometkiwi-da/checkpoints/model.ckpt,
+data_seed=None,
+dataloader_drop_last=False,
+dataloader_num_workers=0,
+dataloader_persistent_workers=False,
+dataloader_pin_memory=True,
+dataloader_prefetch_factor=None,
+ddp_backend=None,
+ddp_broadcast_buffers=None,
+ddp_bucket_cap_mb=None,
+ddp_find_unused_parameters=None,
+ddp_timeout=1800,
+debug=[],
+debug_mode=False,
+deepspeed=configs/ds_z2_config.json,
+dev_data_path=None,
+disable_tqdm=False,
+do_eval=False,
+do_predict=False,
+do_train=False,
+eval_accumulation_steps=None,
+eval_delay=0,
+eval_do_concat_batches=True,
+eval_on_start=False,
+eval_steps=None,
+eval_strategy=no,
+eval_use_gather_object=False,
+flores_script=flores200.py,
+fp16=False,
+fp16_backend=auto,
+fp16_full_eval=False,
+fp16_opt_level=O1,
+fsdp=[],
+fsdp_config={'min_num_params': 0, 'xla': False, 'xla_fsdp_v2': False, 'xla_fsdp_grad_ckpt': False},
+fsdp_min_num_params=0,
+fsdp_transformer_layer_cls_to_wrap=None,
+full_determinism=False,
+gradient_accumulation_steps=1,
+gradient_checkpointing=False,
+gradient_checkpointing_kwargs=None,
+greater_is_better=None,
+group_by_length=False,
+half_precision_backend=auto,
+hub_always_push=False,
+hub_model_id=None,
+hub_private_repo=None,
+hub_revision=None,
+hub_strategy=every_save,
+hub_token=<HUB_TOKEN>,
+ignore_data_skip=False,
+include_for_metrics=[],
+include_inputs_for_metrics=False,
+include_num_input_tokens_seen=no,
+include_tokens_per_second=False,
+instruct_batch_size=1024,
+jit_mode_eval=False,
+label_names=None,
+label_smoothing_factor=0.0,
+learning_rate=0.0001,
+length_column_name=length,
+length_penalty=1.0,
+liger_kernel_config=None,
+llm_path=/mnt/xxx/models/Qwen3-0.6B,
+lm_kl_coeff=0.0,
+lm_sft_coeff=0.0,
+load_best_model_at_end=False,
+local_rank=0,
+log_level=passive,
+log_level_replica=warning,
+log_on_each_node=True,
+logging_dir=ckpts/qwen_debug/runs/Jan29_16-43-07_xxx-b6e5,
+logging_first_step=False,
+logging_nan_inf_filter=True,
+logging_steps=500,
+logging_strategy=steps,
+lr_scheduler_kwargs=None,
+lr_scheduler_type=cosine,
+max_grad_norm=1.0,
+max_length=2048,
+max_new_tokens=200,
+max_steps=-1,
+mcts_sample_size=1,
+metric_for_best_model=None,
+mp_parameters=,
+nas_base_path=.,
+neftune_noise_alpha=None,
+no_cuda=False,
+num_train_epochs=1,
+optim=adamw_torch,
+optim_args=None,
+optim_target_modules=None,
+output_dir=ckpts/qwen_debug/,
+overwrite_output_dir=False,
+padding_side=left,
+parallelism_config=None,
+past_index=-1,
+per_device_eval_batch_size=8,
+per_device_train_batch_size=2,
+pooling_type=average,
+prediction_loss_only=False,
+project=huggingface,
+push_to_hub=False,
+push_to_hub_model_id=None,
+push_to_hub_organization=None,
+push_to_hub_token=<PUSH_TO_HUB_TOKEN>,
+ray_scope=last,
+remove_unused_columns=False,
+report_to=[],
+resize_vocab=False,
+restore_callback_states_from_checkpoint=False,
+resume_from_checkpoint=None,
+rl_batch_size=1024,
+rl_learning_rate=1e-06,
+rl_loss_type=sppo_hard,
+rl_lr_scheduler_type=cosine,
+run_name=qwen_rl_debug,
+save_on_each_node=False,
+save_only_model=False,
+save_safetensors=True,
+save_steps=10,
+save_strategy=steps,
+save_total_limit=2,
+seed=42,
+self_play_languages=['eng_Latn', 'zho_Hans', 'deu_Latn'],
+skip_memory_metrics=True,
+support_languages=['deu_Latn', 'por_Latn', 'fra_Latn', 'ita_Latn', 'eng_Latn', 'hin_Deva', 'spa_Latn', 'vie_Latn', 'zho_Hans', 'rus_Cyrl', 'ukr_Cyrl', 'kor_Hang', 'arb_Arab', 'heb_Hebr'],
+test_data_path=None,
+tf32=None,
+torch_compile=False,
+torch_compile_backend=None,
+torch_compile_mode=None,
+torch_empty_cache_steps=None,
+torchdynamo=None,
+tpu_metrics_debug=False,
+tpu_num_cores=None,
+trackio_space_id=trackio,
+train_data_path=./dataset/sft,
+truncation_side=left,
+use_cpu=False,
+use_legacy_prediction_loop=False,
+use_liger_kernel=False,
+use_lora=False,
+use_mps_device=False,
+valid_data_size=0,
+warmup_ratio=0.0,
+warmup_steps=0,
+weight_decay=0.0,
+)
+/mnt/xxx/trans0/main.py:77: FutureWarning: `tokenizer` is deprecated and will be removed in version 5.0.0 for `Trainer.__init__`. Use `processing_class` instead.
+  trainer = Trainer(
+ignite instruction.
+The tokenizer has new PAD/BOS/EOS tokens that differ from the model config and generation config. The model config and generation config were aligned accordingly, being updated with the tokenizer's values. Updated tokens: {'bos_token_id': None}.
+Before initializing optimizer states
+MA 2.33 GB         Max_MA 2.33 GB         CA 2.67 GB         Max_CA 3 GB 
+CPU Virtual Memory:  used = 47.56 GB, percent = 2.4%
+After initializing optimizer states
+MA 2.33 GB         Max_MA 2.39 GB         CA 2.72 GB         Max_CA 3 GB 
+CPU Virtual Memory:  used = 47.57 GB, percent = 2.4%
+After initializing ZeRO optimizer
+MA 2.33 GB         Max_MA 2.33 GB         CA 2.72 GB         Max_CA 3 GB 
+CPU Virtual Memory:  used = 47.57 GB, percent = 2.4%
+Warning: The current version of the file storing weights is old, and it is relanded due to internal bug of torch and compatibility issue. We will deprecate the loading support for this type of file in the future, please use newer torch to re-store the weight file.
+  0%|          | 0/1 [00:00<?, ?it/s]                                     {'train_runtime': 0.0089, 'train_samples_per_second': 225.67, 'train_steps_per_second': 112.835, 'train_loss': 0.0, 'epoch': 1.0}
+  0%|          | 0/1 [00:00<?, ?it/s]  0%|          | 0/1 [00:00<?, ?it/s]
+***** train metrics *****
+  epoch                    =        1.0
+  total_flos               =      142GF
+  train_loss               =        0.0
+  train_runtime            = 0:00:00.00
+  train_samples_per_second =     225.67
+  train_steps_per_second   =    112.835
+/mnt/xxx/miniconda3/envs/trans0_910/lib/python3.10/site-packages/torch/distributed/distributed_c10d.py:4807: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+<<<<<<<<<<<<<< Start Val <<<<<<<<<<<<<<<<<
+>>>> valid ./cache/qwen_debug/flores_test_eng_Latn-zho_Hans.parquet...
+>>>load data from ./cache/qwen_debug/flores_test_eng_Latn-zho_Hans.parquet
+>>> validate trg output_dir >>>:./ckpts/qwen_debug/
+The tokenizer you are loading from './ckpts/qwen_debug/' with an incorrect regex pattern: https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/discussions/84#69121093e8b480e709447d5e. This will lead to incorrect tokenization. You should set the `fix_mistral_regex=True` flag when loading this tokenizer to fix this issue.
+The module name  (originally ) is not a valid Python identifier. Please rename the original module to avoid import issues.
+  0%|          | 0/1 [00:00<?, ?it/s]`generation_config` default values have been modified to match model-specific defaults: {'do_sample': True, 'temperature': 0.6, 'top_k': 20, 'top_p': 0.95}. If this is not desired, please set these values explicitly.
+/mnt/xxx/miniconda3/envs/trans0_910/lib/python3.10/site-packages/torch/distributed/distributed_c10d.py:4807: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+>>> load data from ./cache/qwen_debug/cached_inference/rank_0
+100%|██████████| 1/1 [00:16<00:00, 16.96s/it]
+The tokenizer class you load from this checkpoint is not the same type as the class this function is called from. It may result in unexpected tokenization. 
+The tokenizer class you load from this checkpoint is 'BleurtSPTokenizer'. 
+The class this function is called from is 'BertTokenizer'.
+/mnt/xxx/miniconda3/envs/trans0_910/lib/python3.10/site-packages/torchmetrics/utilities/imports.py:23: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  from pkg_resources import DistributionNotFound, get_distribution
+[2026-01-29 16:45:02] INFO utils.py:154: Lightning automatically upgraded your loaded checkpoint from v1.8.2 to v2.6.0. To apply the upgrade to your files permanently, run `python -m pytorch_lightning.utilities.upgrade_checkpoint models/Unbabel/wmt22-cometkiwi-da/checkpoints/model.ckpt`
+[2026-01-29 16:45:37] INFO base.py:230: Encoder model frozen.
+/mnt/xxx/miniconda3/envs/trans0_910/lib/python3.10/site-packages/pytorch_lightning/core/saving.py:197: Found keys that are not in the model state dict but in the checkpoint: ['encoder.model.embeddings.position_ids']
+[2026-01-29 16:46:05] INFO callback_connector.py:109: 💡 Tip: For seamless cloud uploads and versioning, try installing [litmodels](https://pypi.org/project/litmodels/) to enable LitModelCheckpoint, which syncs automatically with the Lightning model registry.
+[2026-01-29 16:46:05] INFO setup.py:164: GPU available: False, used: False
+[2026-01-29 16:46:05] INFO setup.py:167: TPU available: False, using: 0 TPU cores
+bleurt=0.1458
+comet=0.2984
+bleurt= 0.1458, comet= 0.2984
+<<<<<<<<<<<<<< End Val <<<<<<<<<<<<<<<<<
+>>> Using device: npu
+>>> loading the agent from ./ckpts/qwen_debug/_RL
+The tokenizer you are loading from './ckpts/qwen_debug/_RL' with an incorrect regex pattern: https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/discussions/84#69121093e8b480e709447d5e. This will lead to incorrect tokenization. You should set the `fix_mistral_regex=True` flag when loading this tokenizer to fix this issue.
+`torch_dtype` is deprecated! Use `dtype` instead!
+The tokenizer class you load from this checkpoint is not the same type as the class this function is called from. It may result in unexpected tokenization. 
+The tokenizer class you load from this checkpoint is 'BleurtSPTokenizer'. 
+The class this function is called from is 'BertTokenizer'.
+`generation_config` default values have been modified to match model-specific defaults: {'top_k': 20, 'top_p': 0.95}. If this is not desired, please set these values explicitly.
+>>>> 0 node: Artificial Intelligence wird die Weisen der Arbeit und der Kommunikation weltweit verändern.
+>>>> 1 node: Die intelligente Arbeiten und Kommunikation weltweit werden geändert.
+>>>> 0 node: Die Ergebnisse des Experimentes zeigen eine bedeutende Verbesserung über frühere Methoden.
+>>>> 1 node: Die Ergebnisse des Experimentes zeigen eine signifikante Verbesserung über frühere Methoden.
+/mnt/xxx/miniconda3/envs/trans0_910/lib/python3.10/site-packages/torch/distributed/distributed_c10d.py:4807: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+/mnt/xxx/trans0/main.py:426: FutureWarning: The behavior of DataFrame concatenation with empty or all-NA entries is deprecated. In a future version, this will no longer exclude empty or all-NA columns when determining the result dtypes. To retain the old behavior, exclude the relevant entries before the concat operation.
+  merged = pd.concat(collected_df, ignore_index=True)
+/mnt/xxx/miniconda3/envs/trans0_910/lib/python3.10/site-packages/torch/distributed/distributed_c10d.py:4807: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+>>> Using device: npu
+>>> loading the agent from ./ckpts/qwen_debug/_RL
+The tokenizer you are loading from './ckpts/qwen_debug/_RL' with an incorrect regex pattern: https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/discussions/84#69121093e8b480e709447d5e. This will lead to incorrect tokenization. You should set the `fix_mistral_regex=True` flag when loading this tokenizer to fix this issue.
+The module name  (originally ) is not a valid Python identifier. Please rename the original module to avoid import issues.
+The tokenizer class you load from this checkpoint is not the same type as the class this function is called from. It may result in unexpected tokenization. 
+The tokenizer class you load from this checkpoint is 'BleurtSPTokenizer'. 
+The class this function is called from is 'BertTokenizer'.
+loading RL finetune data.
+>>> rl tuning at lr: 1e-06...
+The tokenizer you are loading from './ckpts/qwen_debug/_RL' with an incorrect regex pattern: https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/discussions/84#69121093e8b480e709447d5e. This will lead to incorrect tokenization. You should set the `fix_mistral_regex=True` flag when loading this tokenizer to fix this issue.
+Extracting prompt in train dataset:   0%|          | 0/18 [00:00<?, ? examples/s]Extracting prompt in train dataset: 100%|██████████| 18/18 [00:00<00:00, 928.07 examples/s]
+Applying chat template to train dataset:   0%|          | 0/18 [00:00<?, ? examples/s]Applying chat template to train dataset: 100%|██████████| 18/18 [00:00<00:00, 1709.48 examples/s]
+Tokenizing train dataset:   0%|          | 0/18 [00:00<?, ? examples/s]Tokenizing train dataset: 100%|██████████| 18/18 [00:00<00:00, 580.06 examples/s]
+[2026-01-29 16:48:35] WARNING accelerator.py:2164: Gradient accumulation steps mismatch: GradientAccumulationPlugin has 1, DeepSpeed config has 1024. Using DeepSpeed's value.
+Before initializing optimizer states
+MA 6.59 GB         Max_MA 6.59 GB         CA 7.31 GB         Max_CA 7 GB 
+CPU Virtual Memory:  used = 48.41 GB, percent = 2.4%
+After initializing optimizer states
+MA 6.59 GB         Max_MA 8.81 GB         CA 9.53 GB         Max_CA 10 GB 
+CPU Virtual Memory:  used = 48.42 GB, percent = 2.4%
+After initializing ZeRO optimizer
+MA 6.59 GB         Max_MA 6.59 GB         CA 9.53 GB         Max_CA 10 GB 
+CPU Virtual Memory:  used = 48.41 GB, percent = 2.4%
+  0%|          | 0/3 [00:00<?, ?it/s][rank0]:[W129 16:49:11.118192908 compiler_depend.ts:164] Warning: Device do not support double dtype now, dtype cast replace with float. (function operator())
+ 33%|███▎      | 1/3 [00:14<00:29, 14.88s/it] 67%|██████▋   | 2/3 [00:27<00:13, 13.79s/it]100%|██████████| 3/3 [00:41<00:00, 13.61s/it]                                             {'train_runtime': 41.3086, 'train_samples_per_second': 1.307, 'train_steps_per_second': 0.073, 'train_loss': 43.2421875, 'epoch': 3.0}
+100%|██████████| 3/3 [00:41<00:00, 13.61s/it]100%|██████████| 3/3 [00:41<00:00, 13.77s/it]
+***** train metrics *****
+  epoch                    =        3.0
+  total_flos               =        0GF
+  train_loss               =    43.2422
+  train_runtime            = 0:00:41.30
+  train_samples_per_second =      1.307
+  train_steps_per_second   =      0.073
+finish tuning epoch
+>> lapse >>: 71.52410340309143
+/mnt/xxx/miniconda3/envs/trans0_910/lib/python3.10/site-packages/torch/distributed/distributed_c10d.py:4807: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+>>>> valid ./cache/qwen_debug/flores_test_eng_Latn-zho_Hans.parquet...
+>>>load data from ./cache/qwen_debug/flores_test_eng_Latn-zho_Hans.parquet
+>>> validate trg output_dir >>>:./ckpts/qwen_debug/_RL
+The tokenizer you are loading from './ckpts/qwen_debug/_RL' with an incorrect regex pattern: https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/discussions/84#69121093e8b480e709447d5e. This will lead to incorrect tokenization. You should set the `fix_mistral_regex=True` flag when loading this tokenizer to fix this issue.
+  0%|          | 0/1 [00:00<?, ?it/s]/mnt/xxx/miniconda3/envs/trans0_910/lib/python3.10/site-packages/torch/distributed/distributed_c10d.py:4807: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+>>> load data from ./cache/qwen_debug/cached_inference/rank_0
+100%|██████████| 1/1 [00:16<00:00, 16.48s/it]
+The tokenizer class you load from this checkpoint is not the same type as the class this function is called from. It may result in unexpected tokenization. 
+The tokenizer class you load from this checkpoint is 'BleurtSPTokenizer'. 
+The class this function is called from is 'BertTokenizer'.
+[2026-01-29 16:50:44] INFO utils.py:154: Lightning automatically upgraded your loaded checkpoint from v1.8.2 to v2.6.0. To apply the upgrade to your files permanently, run `python -m pytorch_lightning.utilities.upgrade_checkpoint models/Unbabel/wmt22-cometkiwi-da/checkpoints/model.ckpt`
+[2026-01-29 16:51:23] INFO base.py:230: Encoder model frozen.
+/mnt/xxx/miniconda3/envs/trans0_910/lib/python3.10/site-packages/pytorch_lightning/core/saving.py:197: Found keys that are not in the model state dict but in the checkpoint: ['encoder.model.embeddings.position_ids']
+[2026-01-29 16:51:44] INFO callback_connector.py:109: 💡 Tip: For seamless cloud uploads and versioning, try installing [litmodels](https://pypi.org/project/litmodels/) to enable LitModelCheckpoint, which syncs automatically with the Lightning model registry.
+[2026-01-29 16:51:44] INFO setup.py:164: GPU available: False, used: False
+[2026-01-29 16:51:44] INFO setup.py:167: TPU available: False, using: 0 TPU cores
+bleurt=0.2390
+comet=0.3106
+bleurt= 0.2390, comet= 0.3106
+>>> Using device: npu
+>>> loading the agent from ./ckpts/qwen_debug/_RL
+The tokenizer you are loading from './ckpts/qwen_debug/_RL' with an incorrect regex pattern: https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/discussions/84#69121093e8b480e709447d5e. This will lead to incorrect tokenization. You should set the `fix_mistral_regex=True` flag when loading this tokenizer to fix this issue.
+The tokenizer class you load from this checkpoint is not the same type as the class this function is called from. It may result in unexpected tokenization. 
+The tokenizer class you load from this checkpoint is 'BleurtSPTokenizer'. 
+The class this function is called from is 'BertTokenizer'.
+>>>> 0 node: Die Ergebnisse zeigen, dass diese Methode in der Leistung deutlich besser ist als frühere Methoden.
+>>>> 1 node: Diese Ergebnisse zeigen, dass diese Methode in der Effizienz besser ist als frühere Methoden.
+>>>> 0 node: AI-Technologie hat die Arbeitswelt und die gesellschaftliche Struktur grundlegend verändert. In deutscher Simplizität könnte das übersetzt werden als: **„AI-Technologie hat die Arbeitswelt und die gesellschaftliche Struktur grundlegend verändert.“**
+>>>> 1 node: AI-Teknologie hat die Arbeitswelt und die gesellschaftliche Struktur grundlegend verändert. In deutscher Simplizität würde das übersetzt werden als: „AI-Technologie hat die Arbeitswelt und die gesellschaftliche Struktur grundlegend verändert.“
+/mnt/xxx/miniconda3/envs/trans0_910/lib/python3.10/site-packages/torch/distributed/distributed_c10d.py:4807: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+/mnt/xxx/miniconda3/envs/trans0_910/lib/python3.10/site-packages/torch/distributed/distributed_c10d.py:4807: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+>>> Using device: npu
+>>> loading the agent from ./ckpts/qwen_debug/_RL
+The tokenizer you are loading from './ckpts/qwen_debug/_RL' with an incorrect regex pattern: https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/discussions/84#69121093e8b480e709447d5e. This will lead to incorrect tokenization. You should set the `fix_mistral_regex=True` flag when loading this tokenizer to fix this issue.
+The module name  (originally ) is not a valid Python identifier. Please rename the original module to avoid import issues.
+The tokenizer class you load from this checkpoint is not the same type as the class this function is called from. It may result in unexpected tokenization. 
+The tokenizer class you load from this checkpoint is 'BleurtSPTokenizer'. 
+The class this function is called from is 'BertTokenizer'.
+loading RL finetune data.
+>>> rl tuning at lr: 1e-06...
+The tokenizer you are loading from './ckpts/qwen_debug/_RL' with an incorrect regex pattern: https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/discussions/84#69121093e8b480e709447d5e. This will lead to incorrect tokenization. You should set the `fix_mistral_regex=True` flag when loading this tokenizer to fix this issue.
+Extracting prompt in train dataset:   0%|          | 0/5 [00:00<?, ? examples/s]Extracting prompt in train dataset: 100%|██████████| 5/5 [00:00<00:00, 319.57 examples/s]
+Applying chat template to train dataset:   0%|          | 0/5 [00:00<?, ? examples/s]Applying chat template to train dataset: 100%|██████████| 5/5 [00:00<00:00, 637.20 examples/s]
+Tokenizing train dataset:   0%|          | 0/5 [00:00<?, ? examples/s]Tokenizing train dataset: 100%|██████████| 5/5 [00:00<00:00, 308.20 examples/s]
+[2026-01-29 16:54:36] WARNING accelerator.py:2164: Gradient accumulation steps mismatch: GradientAccumulationPlugin has 1, DeepSpeed config has 1024. Using DeepSpeed's value.
+Before initializing optimizer states
+MA 6.59 GB         Max_MA 6.59 GB         CA 7.02 GB         Max_CA 7 GB 
+CPU Virtual Memory:  used = 48.35 GB, percent = 2.4%
+After initializing optimizer states
+MA 6.59 GB         Max_MA 8.81 GB         CA 9.24 GB         Max_CA 9 GB 
+CPU Virtual Memory:  used = 48.36 GB, percent = 2.4%
+After initializing ZeRO optimizer
+MA 6.59 GB         Max_MA 6.59 GB         CA 9.24 GB         Max_CA 9 GB 
+CPU Virtual Memory:  used = 48.36 GB, percent = 2.4%
+  0%|          | 0/3 [00:00<?, ?it/s] 33%|███▎      | 1/3 [00:05<00:10,  5.39s/it] 67%|██████▋   | 2/3 [00:10<00:05,  5.08s/it]100%|██████████| 3/3 [00:15<00:00,  5.02s/it]                                             {'train_runtime': 15.1935, 'train_samples_per_second': 0.987, 'train_steps_per_second': 0.197, 'train_loss': 45.8125, 'epoch': 3.0}
+100%|██████████| 3/3 [00:15<00:00,  5.02s/it]100%|██████████| 3/3 [00:15<00:00,  5.06s/it]
+***** train metrics *****
+  epoch                    =        3.0
+  total_flos               =        0GF
+  train_loss               =    45.8125
+  train_runtime            = 0:00:15.19
+  train_samples_per_second =      0.987
+  train_steps_per_second   =      0.197
+finish tuning epoch
+>> lapse >>: 48.809425830841064
+/mnt/xxx/miniconda3/envs/trans0_910/lib/python3.10/site-packages/torch/distributed/distributed_c10d.py:4807: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+>>>> valid ./cache/qwen_debug/flores_test_eng_Latn-zho_Hans.parquet...
+>>>load data from ./cache/qwen_debug/flores_test_eng_Latn-zho_Hans.parquet
+>>> validate trg output_dir >>>:./ckpts/qwen_debug/_RL
+The tokenizer you are loading from './ckpts/qwen_debug/_RL' with an incorrect regex pattern: https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/discussions/84#69121093e8b480e709447d5e. This will lead to incorrect tokenization. You should set the `fix_mistral_regex=True` flag when loading this tokenizer to fix this issue.
+  0%|          | 0/1 [00:00<?, ?it/s]/mnt/xxx/miniconda3/envs/trans0_910/lib/python3.10/site-packages/torch/distributed/distributed_c10d.py:4807: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+>>> load data from ./cache/qwen_debug/cached_inference/rank_0
+100%|██████████| 1/1 [00:17<00:00, 17.08s/it]
+The tokenizer class you load from this checkpoint is not the same type as the class this function is called from. It may result in unexpected tokenization. 
+The tokenizer class you load from this checkpoint is 'BleurtSPTokenizer'. 
+The class this function is called from is 'BertTokenizer'.
+[2026-01-29 16:56:23] INFO utils.py:154: Lightning automatically upgraded your loaded checkpoint from v1.8.2 to v2.6.0. To apply the upgrade to your files permanently, run `python -m pytorch_lightning.utilities.upgrade_checkpoint models/Unbabel/wmt22-cometkiwi-da/checkpoints/model.ckpt`
+[2026-01-29 16:56:57] INFO base.py:230: Encoder model frozen.
+/mnt/xxx/miniconda3/envs/trans0_910/lib/python3.10/site-packages/pytorch_lightning/core/saving.py:197: Found keys that are not in the model state dict but in the checkpoint: ['encoder.model.embeddings.position_ids']
+[2026-01-29 16:57:10] INFO callback_connector.py:109: 💡 Tip: For seamless cloud uploads and versioning, try installing [litmodels](https://pypi.org/project/litmodels/) to enable LitModelCheckpoint, which syncs automatically with the Lightning model registry.
+[2026-01-29 16:57:10] INFO setup.py:164: GPU available: False, used: False
+[2026-01-29 16:57:10] INFO setup.py:167: TPU available: False, using: 0 TPU cores
+bleurt=0.2390
+comet=0.3106
+bleurt= 0.2390, comet= 0.3106
+path string is NULLpath string is NULL
