@@ -182,3 +182,4 @@ ARNOLD_WORKER_NUM=1 torchrun \
   --report_to none \
   2>&1 | tee continue.log
 ```
+> **An NPU run log for RL is available in [`continue.log`](./continue.log).**
